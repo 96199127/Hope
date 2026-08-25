@@ -1,0 +1,86 @@
+version: "3.8"
+
+# Monitoramento de WhatsApp - Hope Consultoria
+# Stack: WAHA (conector WhatsApp Web) + Chatwoot (caixa de entrada/SLA) + Postgres + Redis
+#
+# Uso:
+#   cd whatsapp-monitor
+#   cp .env.example .env   # ajuste as senhas antes de subir
+#   docker compose up -d
+#
+# Acesso:
+#   Chatwoot ......... http://localhost:3001
+#   WAHA (API/QR) .... http://localhost:3000
+
+services:
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: chatwoot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chatwoot:
+    image: chatwoot/chatwoot:latest
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+      FRONTEND_URL: http://localhost:3001
+      DEFAULT_LOCALE: pt_BR
+      POSTGRES_HOST: postgres
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DATABASE: chatwoot
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      RAILS_ENV: production
+      INSTALLATION_ENV: docker
+      ENABLE_ACCOUNT_SIGNUP: "false"
+    volumes:
+      - chatwoot_storage:/app/storage
+    command: >
+      sh -c "bundle exec rails db:chatwoot_prepare && bundle exec rails s -p 3000 -b 0.0.0.0"
+
+  waha:
+    image: devlikeapro/waha:latest
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      WHATSAPP_HOOK_URL: http://chatwoot:3000/webhooks/whatsapp
+      WHATSAPP_HOOK_EVENTS: "message,message.ack"
+      WAHA_API_KEY: ${WAHA_API_KEY}
+    volumes:
+      - waha_sessions:/app/.sessions
+
+volumes:
+  postgres_data:
+  redis_data:
+  chatwoot_storage:
+  waha_sessions:
