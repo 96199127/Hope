@@ -15,12 +15,12 @@ function calcWorkedMinutes(punchesOfDay) {
   return Math.round(minutes);
 }
 
-function buildReportRows({ from, to, employeeId }) {
+function buildReportRows({ from, to, employeeId, companyId }) {
   let query = `
     SELECT p.id, p.employee_id, e.name, e.cpf, p.type, p.timestamp
     FROM punches p JOIN employees e ON e.id = p.employee_id
-    WHERE 1=1`;
-  const params = [];
+    WHERE e.company_id = ?`;
+  const params = [companyId];
   if (from) {
     query += ' AND date(p.timestamp) >= ?';
     params.push(from);
@@ -70,13 +70,13 @@ function buildReportRows({ from, to, employeeId }) {
 // Relatório em JSON (para tela do DP)
 router.get('/', requireAuth, requireAdmin, (req, res) => {
   const { from, to, employeeId } = req.query;
-  res.json(buildReportRows({ from, to, employeeId }));
+  res.json(buildReportRows({ from, to, employeeId, companyId: req.user.companyId }));
 });
 
 // Relatório em CSV (para fechamento de folha)
 router.get('/csv', requireAuth, requireAdmin, (req, res) => {
   const { from, to, employeeId } = req.query;
-  const rows = buildReportRows({ from, to, employeeId });
+  const rows = buildReportRows({ from, to, employeeId, companyId: req.user.companyId });
 
   const header = 'Colaborador;CPF;Data;Entrada;Saida Almoco;Volta Almoco;Saida;Horas Trabalhadas';
   const lines = rows.map((r) =>

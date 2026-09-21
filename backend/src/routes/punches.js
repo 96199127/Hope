@@ -36,12 +36,12 @@ function euclideanDistance(a, b) {
   return Math.sqrt(sum);
 }
 
-function findBestMatch(descriptor) {
+function findBestMatch(companyId, descriptor) {
   const candidates = db
     .prepare(
-      "SELECT id, name, face_descriptor FROM employees WHERE active = 1 AND face_descriptor IS NOT NULL"
+      "SELECT id, name, face_descriptor FROM employees WHERE company_id = ? AND active = 1 AND face_descriptor IS NOT NULL"
     )
-    .all();
+    .all(companyId);
 
   let best = null;
   for (const c of candidates) {
@@ -80,7 +80,7 @@ router.post('/recognize', requireAuth, requireKioskOrAdmin, (req, res) => {
     return res.status(400).json({ error: 'Rosto não detectado corretamente, tente novamente' });
   }
 
-  const best = findBestMatch(descriptor);
+  const best = findBestMatch(req.user.companyId, descriptor);
   if (!best || best.distance > MATCH_THRESHOLD) {
     return res.status(404).json({ error: 'Rosto não reconhecido. Procure o DP para revisar seu cadastro.' });
   }
@@ -113,8 +113,8 @@ router.post('/', requireAuth, requireKioskOrAdmin, upload.single('photo'), (req,
   }
 
   const employee = db
-    .prepare('SELECT id, name, face_descriptor FROM employees WHERE id = ? AND active = 1')
-    .get(employeeId);
+    .prepare('SELECT id, name, face_descriptor FROM employees WHERE id = ? AND company_id = ? AND active = 1')
+    .get(employeeId, req.user.companyId);
   if (!employee || !employee.face_descriptor) {
     cleanup();
     return res.status(404).json({ error: 'Colaborador não encontrado' });

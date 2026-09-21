@@ -28,15 +28,15 @@ const upload = multer({
   },
 });
 
-// DP/admin: listar colaboradores
+// DP/admin: listar colaboradores da própria empresa
 router.get('/', requireAuth, requireAdmin, (req, res) => {
   const employees = db
     .prepare(
       `SELECT id, name, cpf, email, role, active,
               (face_descriptor IS NOT NULL) as has_face
-       FROM employees ORDER BY name`
+       FROM employees WHERE company_id = ? ORDER BY name`
     )
-    .all();
+    .all(req.user.companyId);
   res.json(employees);
 });
 
@@ -60,10 +60,11 @@ router.post('/', requireAuth, requireAdmin, upload.single('photo'), (req, res) =
   try {
     const info = db
       .prepare(
-        `INSERT INTO employees (name, cpf, email, role, password_hash, reference_photo_path, face_descriptor)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO employees (company_id, name, cpf, email, role, password_hash, reference_photo_path, face_descriptor)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
+        req.user.companyId,
         name,
         cleanCpf,
         email || null,
@@ -75,16 +76,18 @@ router.post('/', requireAuth, requireAdmin, upload.single('photo'), (req, res) =
     res.status(201).json({ id: info.lastInsertRowid });
   } catch (e) {
     if (String(e.message).includes('UNIQUE')) {
-      return res.status(409).json({ error: 'CPF já cadastrado' });
+      return res.status(409).json({ error: 'CPF já cadastrado nesta empresa' });
     }
     res.status(500).json({ error: 'Erro ao cadastrar colaborador' });
   }
 });
 
-// DP/admin: atualizar colaborador (ativar/desativar, trocar foto de referência, etc.)
+// DP/admin: atualizar colaborador da própria empresa (ativar/desativar, trocar foto de referência, etc.)
 router.patch('/:id', requireAuth, requireAdmin, upload.single('photo'), (req, res) => {
   const { active, name, email, password, role, descriptor } = req.body;
-  const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
+  const employee = db
+    .prepare('SELECT * FROM employees WHERE id = ? AND company_id = ?')
+    .get(req.params.id, req.user.companyId);
   if (!employee) return res.status(404).json({ error: 'Colaborador não encontrado' });
 
   db.prepare(
@@ -96,7 +99,7 @@ router.patch('/:id', requireAuth, requireAdmin, upload.single('photo'), (req, re
       password_hash = COALESCE(?, password_hash),
       reference_photo_path = COALESCE(?, reference_photo_path),
       face_descriptor = COALESCE(?, face_descriptor)
-     WHERE id = ?`
+     WHERE id = ? AND company_id = ?`
   ).run(
     name ?? null,
     email ?? null,
@@ -105,7 +108,8 @@ router.patch('/:id', requireAuth, requireAdmin, upload.single('photo'), (req, re
     password ? bcrypt.hashSync(password, 10) : null,
     req.file ? path.basename(req.file.path) : null,
     descriptor ?? null,
-    req.params.id
+    req.params.id,
+    req.user.companyId
   );
 
   res.json({ ok: true });

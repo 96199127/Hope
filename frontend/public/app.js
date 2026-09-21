@@ -6,23 +6,28 @@ const state = {
   token: localStorage.getItem('ponto_token') || null,
   role: localStorage.getItem('ponto_role') || null, // 'kiosk' | 'admin'
   admin: JSON.parse(localStorage.getItem('ponto_admin') || 'null'),
+  company: JSON.parse(localStorage.getItem('ponto_company') || 'null'),
 };
 
-function saveSession(token, role, admin) {
+function saveSession(token, role, admin, company) {
   state.token = token;
   state.role = role;
   state.admin = admin || null;
+  state.company = company || null;
   localStorage.setItem('ponto_token', token);
   localStorage.setItem('ponto_role', role);
   localStorage.setItem('ponto_admin', JSON.stringify(admin || null));
+  localStorage.setItem('ponto_company', JSON.stringify(company || null));
 }
 function clearSession() {
   state.token = null;
   state.role = null;
   state.admin = null;
+  state.company = null;
   localStorage.removeItem('ponto_token');
   localStorage.removeItem('ponto_role');
   localStorage.removeItem('ponto_admin');
+  localStorage.removeItem('ponto_company');
 }
 
 async function api(path, opts = {}) {
@@ -114,7 +119,7 @@ function renderKioskLogin(error) {
     const password = document.getElementById('password').value;
     try {
       const data = await api('/auth/kiosk-login', { method: 'POST', body: { cnpj, password } });
-      saveSession(data.token, 'kiosk', null);
+      saveSession(data.token, 'kiosk', null, data.company);
       route();
     } catch (err) {
       renderKioskLogin(err.message);
@@ -145,7 +150,7 @@ function renderAdminLogin(error) {
     const password = document.getElementById('password').value;
     try {
       const data = await api('/auth/login', { method: 'POST', body: { email, password } });
-      saveSession(data.token, 'admin', data.employee);
+      saveSession(data.token, 'admin', data.employee, data.company);
       route();
     } catch (err) {
       renderAdminLogin(err.message);
@@ -159,7 +164,7 @@ async function renderKioskHome() {
   render(`
     <div class="topbar">
       <img src="logo.jpg" alt="Hope Consultoria" class="logo-small" />
-      <span class="badge">Terminal de ponto</span>
+      <span class="badge">${state.company?.name || 'Terminal de ponto'}</span>
       <button class="secondary" id="logout">Sair</button>
     </div>
     <div class="card center" id="clock-wrap"></div>
@@ -299,7 +304,7 @@ async function renderAdminHome() {
   inner.innerHTML = `
     <div class="topbar">
       <img src="logo.jpg" alt="Hope Consultoria" class="logo-small" />
-      <span class="badge">DP · ${state.admin?.name || ''}</span>
+      <span class="badge">${state.company?.name || 'DP'} · ${state.admin?.name || ''}</span>
       <div class="row" style="max-width:220px">
         <button class="secondary" id="to-kiosk">Terminal de ponto</button>
         <button class="secondary" id="logout">Sair</button>

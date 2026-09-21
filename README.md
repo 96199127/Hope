@@ -9,7 +9,7 @@ Sistema próprio de marcação de ponto dos colaboradores da Hope Consultoria, p
 
 ## Como funciona (igual ao terminal do Secullum)
 
-1. **Login único do terminal**: qualquer celular/tablet/PC usado para bater ponto entra com o **CNPJ da empresa + senha compartilhada** (não é um login por colaborador).
+1. **Login único do terminal, por empresa**: cada empresa cliente tem seu próprio **CNPJ + senha**. Qualquer celular/tablet/PC usado para bater ponto entra com essas credenciais (não é um login por colaborador) e só enxerga os colaboradores daquela empresa.
 2. Cada colaborador chega no aparelho, toca em **"Reconhecer meu rosto"** — o próprio navegador compara o rosto capturado com as fotos de cadastro e identifica quem é, sem precisar digitar nada.
 3. O sistema confirma o nome e qual marcação é a vez (entrada, saída para almoço, volta do almoço ou saída), o colaborador confirma e a foto da batida fica registrada.
 4. O **DP** tem um login separado (e-mail + senha) para cadastrar colaboradores (com a foto de referência), acompanhar batidas e gerar relatórios.
@@ -29,7 +29,7 @@ O reconhecimento facial roda **inteiramente no navegador** (biblioteca [face-api
 
 ```bash
 cd backend
-cp .env.example .env   # ajuste JWT_SECRET, COMPANY_CNPJ, COMPANY_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
+cp .env.example .env   # ajuste JWT_SECRET e os dados de cada empresa (COMPANY_1_*, COMPANY_2_*...)
 npm install
 npm run dev             # http://localhost:3001
 
@@ -38,8 +38,9 @@ npm install
 npm start                # http://localhost:3000
 ```
 
-- **Terminal de ponto**: entra com o `COMPANY_CNPJ`/`COMPANY_PASSWORD` definidos no `.env` (padrão sugerido: senha `Hope@12`).
-- **DP**: entra com `ADMIN_EMAIL`/`ADMIN_PASSWORD` do `.env`, clicando em "Acesso do DP" na tela de login.
+- **Terminal de ponto**: entra com o CNPJ/senha da empresa (`COMPANY_1_CNPJ`/`COMPANY_1_PASSWORD` no `.env`). O `.env.example` já vem com a primeira empresa, **GRILL HAMBURGUERIA LTDA**, senha `Hope@12`.
+- **DP**: entra com `COMPANY_1_ADMIN_EMAIL`/`COMPANY_1_ADMIN_PASSWORD` do `.env`, clicando em "Acesso do DP" na tela de login.
+- Para atender **outra empresa cliente**, duplique o bloco no `.env` trocando o número (`COMPANY_2_NAME`, `COMPANY_2_CNPJ`, `COMPANY_2_PASSWORD`, `COMPANY_2_ADMIN_EMAIL`...) — cada empresa tem login, colaboradores e relatórios completamente isolados.
 - Antes de qualquer colaborador conseguir bater ponto, o DP precisa cadastrá-lo com uma foto de rosto (tela "Novo colaborador" → anexar foto → "Detectar rosto na foto" → cadastrar).
 
 ## Deploy no servidor Oraclon (junto do Chatwoot)
