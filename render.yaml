@@ -1,0 +1,53 @@
+# Deploy de teste gratuito no Render.com (https://render.com).
+# Sobe backend + frontend juntos em um único serviço, para testar rapidamente
+# antes de ir para o servidor Oraclon em produção (veja docker-compose.yml).
+#
+# Como usar:
+# 1. Crie uma conta em render.com (pode entrar com GitHub).
+# 2. New + -> Blueprint -> conecte o repositório 96199127/Hope, branch claude/hopeful-ride-2rotsf.
+# 3. O Render vai ler este arquivo e criar o serviço automaticamente.
+# 4. Depois de criado, edite as variáveis de ambiente marcadas como "sync: false"
+#    (JWT_SECRET, dados da empresa) na aba Environment do serviço.
+#
+# Atenção: o plano gratuito do Render tem disco temporário — os dados (colaboradores,
+# fotos e batidas) podem ser apagados quando o serviço reinicia ou "dorme" por
+# inatividade. Serve para TESTAR o sistema, não para uso real da folha de ponto.
+# Para produção, use o docker-compose.yml no servidor Oraclon (dados guardados em volume).
+
+services:
+  - type: web
+    name: hope-ponto-teste
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        sync: false
+      - key: DB_PATH
+        value: /opt/render/project/src/data/ponto.db
+      - key: UPLOADS_PATH
+        value: /opt/render/project/src/uploads
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: FACE_MATCH_THRESHOLD
+        value: "0.5"
+      - key: COMPANY_1_NAME
+        value: "GRILL HAMBURGUERIA LTDA"
+      - key: COMPANY_1_CNPJ
+        value: "51396551000157"
+      - key: COMPANY_1_PASSWORD
+        sync: false
+      - key: COMPANY_1_PHONE
+        value: "(64) 9301-4800"
+      - key: COMPANY_1_CITY
+        value: "Quirinópolis/GO"
+      - key: COMPANY_1_TAX_REGIME
+        value: "Simples Nacional"
+      - key: COMPANY_1_ADMIN_EMAIL
+        value: "dp@hopeconsultoria.com"
+      - key: COMPANY_1_ADMIN_PASSWORD
+        sync: false
