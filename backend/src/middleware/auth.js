@@ -17,4 +17,12 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdmin };
+// O terminal de ponto (login por CNPJ) e o DP (login por e-mail) podem bater ponto/consultar status
+function requireKioskOrAdmin(req, res, next) {
+  if (req.user?.role !== 'kiosk' && req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Acesso restrito ao terminal de ponto' });
+  }
+  next();
+}
+
+module.exports = { requireAuth, requireAdmin, requireKioskOrAdmin };

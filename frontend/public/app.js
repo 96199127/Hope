@@ -1,22 +1,28 @@
 const API_BASE = window.PONTO_API_BASE || '/api';
+const FACE_MODELS_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
 const app = document.getElementById('app');
 
 const state = {
   token: localStorage.getItem('ponto_token') || null,
-  employee: JSON.parse(localStorage.getItem('ponto_employee') || 'null'),
+  role: localStorage.getItem('ponto_role') || null, // 'kiosk' | 'admin'
+  admin: JSON.parse(localStorage.getItem('ponto_admin') || 'null'),
 };
 
-function saveSession(token, employee) {
+function saveSession(token, role, admin) {
   state.token = token;
-  state.employee = employee;
+  state.role = role;
+  state.admin = admin || null;
   localStorage.setItem('ponto_token', token);
-  localStorage.setItem('ponto_employee', JSON.stringify(employee));
+  localStorage.setItem('ponto_role', role);
+  localStorage.setItem('ponto_admin', JSON.stringify(admin || null));
 }
 function clearSession() {
   state.token = null;
-  state.employee = null;
+  state.role = null;
+  state.admin = null;
   localStorage.removeItem('ponto_token');
-  localStorage.removeItem('ponto_employee');
+  localStorage.removeItem('ponto_role');
+  localStorage.removeItem('ponto_admin');
 }
 
 async function api(path, opts = {}) {
@@ -50,73 +56,140 @@ function clockLine() {
   return el;
 }
 
+// ---------- Reconhecimento facial (face-api.js roda 100% no navegador) ----------
+let modelsPromise = null;
+function loadFaceModels() {
+  if (!modelsPromise) {
+    modelsPromise = Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODELS_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODELS_URL),
+    ]);
+  }
+  return modelsPromise;
+}
+
+async function detectDescriptor(mediaEl) {
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const result = await faceapi
+    .detectSingleFace(mediaEl, options)
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+  return result ? Array.from(result.descriptor) : null;
+}
+
+function captureFrame(video) {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  return canvas;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+}
+
 // ---------- Login ----------
-function renderLogin(error) {
+function renderKioskLogin(error) {
   render(`
     <div class="logo-wrap"><img src="logo.jpg" alt="Hope Consultoria" /></div>
     <h1>⏰ Marcador de Ponto</h1>
     <div class="card">
       <form id="login-form">
         ${error ? `<div class="error">${error}</div>` : ''}
-        <label class="muted">CPF</label>
-        <input id="cpf" inputmode="numeric" placeholder="Somente números" required />
+        <label class="muted">CNPJ da empresa</label>
+        <input id="cnpj" inputmode="numeric" placeholder="Somente números" required />
+        <label class="muted">Senha</label>
+        <input id="password" type="password" required />
+        <button type="submit">Entrar no terminal de ponto</button>
+      </form>
+    </div>
+    <p class="muted center">Após entrar, cada colaborador é identificado pelo rosto na hora de bater o ponto.</p>
+    <p class="muted center"><a href="#" id="admin-link">Acesso do DP</a></p>
+  `);
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cnpj = document.getElementById('cnpj').value;
+    const password = document.getElementById('password').value;
+    try {
+      const data = await api('/auth/kiosk-login', { method: 'POST', body: { cnpj, password } });
+      saveSession(data.token, 'kiosk', null);
+      route();
+    } catch (err) {
+      renderKioskLogin(err.message);
+    }
+  });
+  document.getElementById('admin-link').onclick = (e) => { e.preventDefault(); renderAdminLogin(); };
+}
+
+function renderAdminLogin(error) {
+  render(`
+    <div class="logo-wrap"><img src="logo.jpg" alt="Hope Consultoria" /></div>
+    <h1>Acesso do DP</h1>
+    <div class="card">
+      <form id="admin-login-form">
+        ${error ? `<div class="error">${error}</div>` : ''}
+        <label class="muted">E-mail</label>
+        <input id="email" type="email" required />
         <label class="muted">Senha</label>
         <input id="password" type="password" required />
         <button type="submit">Entrar</button>
       </form>
     </div>
-    <p class="muted center">Hope Consultoria · marcação de ponto com foto</p>
+    <p class="muted center"><a href="#" id="back-link">Voltar para o terminal de ponto</a></p>
   `);
-  document.getElementById('login-form').addEventListener('submit', async (e) => {
+  document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const cpf = document.getElementById('cpf').value;
+    const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     try {
-      const data = await api('/auth/login', { method: 'POST', body: { cpf, password } });
-      saveSession(data.token, data.employee);
+      const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+      saveSession(data.token, 'admin', data.employee);
       route();
     } catch (err) {
-      renderLogin(err.message);
+      renderAdminLogin(err.message);
     }
   });
+  document.getElementById('back-link').onclick = (e) => { e.preventDefault(); renderKioskLogin(); };
 }
 
-// ---------- Employee: bater ponto ----------
-async function renderEmployeeHome() {
+// ---------- Terminal: reconhecimento facial + bater ponto ----------
+async function renderKioskHome() {
   render(`
     <div class="topbar">
       <img src="logo.jpg" alt="Hope Consultoria" class="logo-small" />
-      <span class="badge">${state.employee.name}</span>
+      <span class="badge">Terminal de ponto</span>
       <button class="secondary" id="logout">Sair</button>
     </div>
-    <h1>Bater ponto</h1>
     <div class="card center" id="clock-wrap"></div>
     <div class="card" id="camera-card">
-      <p class="muted center" id="next-type">Carregando...</p>
+      <p class="muted center" id="status-text">Carregando reconhecimento facial...</p>
       <video id="video" autoplay playsinline muted></video>
-      <canvas id="canvas" style="display:none"></canvas>
       <img id="preview" class="preview" style="display:none" />
+      <div id="recognized-box" class="recognized-box" style="display:none"></div>
       <div class="row" style="margin-top:10px">
-        <button id="capture">📷 Tirar foto</button>
+        <button id="scan" disabled>👤 Reconhecer meu rosto</button>
       </div>
       <div class="row" id="confirm-row" style="display:none">
-        <button class="secondary" id="retake">Repetir</button>
+        <button class="secondary" id="cancel">Cancelar</button>
         <button id="confirm">Confirmar batida</button>
       </div>
       <p class="error" id="punch-error"></p>
     </div>
-    <div class="card">
-      <h2>Minhas últimas batidas</h2>
-      <div id="mine-list" class="muted">Carregando...</div>
-    </div>
+    <p class="muted center">A foto é obrigatória e fica guardada apenas para conferência do DP.</p>
   `);
   document.getElementById('clock-wrap').appendChild(clockLine());
   document.getElementById('logout').onclick = () => { clearSession(); route(); };
 
-  let stream;
-  let photoBlob = null;
-  let coords = null;
+  const statusText = document.getElementById('status-text');
+  const scanBtn = document.getElementById('scan');
+  const video = document.getElementById('video');
+  const preview = document.getElementById('preview');
+  const recognizedBox = document.getElementById('recognized-box');
+  const errorEl = document.getElementById('punch-error');
 
+  let coords = null;
   try {
     coords = await new Promise((resolve) => {
       if (!navigator.geolocation) return resolve(null);
@@ -128,101 +201,107 @@ async function renderEmployeeHome() {
     });
   } catch { coords = null; }
 
-  const video = document.getElementById('video');
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
     video.srcObject = stream;
   } catch {
-    document.getElementById('punch-error').textContent =
-      'Não foi possível acessar a câmera. Permita o uso da câmera para bater o ponto.';
+    statusText.textContent = 'Não foi possível acessar a câmera. Permita o uso da câmera para bater o ponto.';
+    return;
   }
 
-  async function loadStatus() {
+  try {
+    await loadFaceModels();
+    statusText.textContent = 'Posicione o rosto na câmera e toque em "Reconhecer meu rosto".';
+    scanBtn.disabled = false;
+  } catch {
+    statusText.textContent = 'Não foi possível carregar o reconhecimento facial. Verifique a conexão com a internet.';
+    return;
+  }
+
+  let capturedCanvas = null;
+  let recognized = null; // { employeeId, name, descriptor, nextType }
+
+  scanBtn.onclick = async () => {
+    errorEl.textContent = '';
+    scanBtn.disabled = true;
+    statusText.textContent = 'Reconhecendo...';
     try {
-      const { nextType } = await api('/punches/status');
-      document.getElementById('next-type').textContent = nextType
-        ? `Próxima marcação: ${TYPE_LABELS[nextType]}`
-        : 'Todas as marcações de hoje já foram feitas ✅';
-      document.getElementById('capture').disabled = !nextType;
-      return nextType;
-    } catch (e) {
-      document.getElementById('next-type').textContent = e.message;
-      return null;
-    }
-  }
-  let nextType = await loadStatus();
+      const descriptor = await detectDescriptor(video);
+      if (!descriptor) {
+        statusText.textContent = 'Não encontrei um rosto. Aproxime-se da câmera e tente de novo.';
+        scanBtn.disabled = false;
+        return;
+      }
+      const match = await api('/punches/recognize', { method: 'POST', body: { descriptor } });
+      recognized = { employeeId: match.employeeId, name: match.name, descriptor, nextType: match.nextType };
 
-  document.getElementById('capture').onclick = () => {
-    const canvas = document.getElementById('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    canvas.toBlob((blob) => {
-      photoBlob = blob;
-      document.getElementById('preview').src = URL.createObjectURL(blob);
-      document.getElementById('preview').style.display = 'block';
+      capturedCanvas = captureFrame(video);
+      preview.src = capturedCanvas.toDataURL('image/jpeg', 0.85);
+      preview.style.display = 'block';
       video.style.display = 'none';
-      document.getElementById('capture').style.display = 'none';
+
+      recognizedBox.style.display = 'block';
+      recognizedBox.innerHTML = match.nextType
+        ? `<strong>${match.name}</strong><br/>Marcação: ${TYPE_LABELS[match.nextType]}`
+        : `<strong>${match.name}</strong><br/>Todas as marcações de hoje já foram feitas ✅`;
+
+      statusText.textContent = '';
       document.getElementById('confirm-row').style.display = 'flex';
-    }, 'image/jpeg', 0.85);
+      document.getElementById('confirm').disabled = !match.nextType;
+    } catch (err) {
+      statusText.textContent = err.message;
+      scanBtn.disabled = false;
+    }
   };
 
-  document.getElementById('retake').onclick = () => {
-    photoBlob = null;
-    document.getElementById('preview').style.display = 'none';
+  function resetToScan() {
+    recognized = null;
+    capturedCanvas = null;
+    preview.style.display = 'none';
     video.style.display = 'block';
-    document.getElementById('capture').style.display = 'block';
+    recognizedBox.style.display = 'none';
     document.getElementById('confirm-row').style.display = 'none';
-  };
+    scanBtn.disabled = false;
+    statusText.textContent = 'Posicione o rosto na câmera e toque em "Reconhecer meu rosto".';
+  }
+
+  document.getElementById('cancel').onclick = resetToScan;
 
   document.getElementById('confirm').onclick = async () => {
-    if (!photoBlob) return;
-    const errorEl = document.getElementById('punch-error');
+    if (!recognized || !capturedCanvas) return;
     errorEl.textContent = '';
-    const form = new FormData();
-    form.append('photo', photoBlob, 'ponto.jpg');
-    if (coords) {
-      form.append('latitude', coords.lat);
-      form.append('longitude', coords.lng);
-    }
+    document.getElementById('confirm').disabled = true;
     try {
-      await api('/punches', { method: 'POST', body: form });
-      document.getElementById('retake').click();
-      nextType = await loadStatus();
-      await loadMine();
-    } catch (e) {
-      errorEl.textContent = e.message;
+      const blob = await canvasToBlob(capturedCanvas);
+      const form = new FormData();
+      form.append('photo', blob, 'ponto.jpg');
+      form.append('employeeId', recognized.employeeId);
+      form.append('descriptor', JSON.stringify(recognized.descriptor));
+      if (coords) {
+        form.append('latitude', coords.lat);
+        form.append('longitude', coords.lng);
+      }
+      const result = await api('/punches', { method: 'POST', body: form });
+      recognizedBox.innerHTML = `<strong>${result.name}</strong><br/>${TYPE_LABELS[result.type]} registrada às ${new Date().toLocaleTimeString('pt-BR')} ✅`;
+      document.getElementById('confirm-row').style.display = 'none';
+      setTimeout(resetToScan, 3000);
+    } catch (err) {
+      errorEl.textContent = err.message;
+      document.getElementById('confirm').disabled = false;
     }
   };
-
-  async function loadMine() {
-    const list = document.getElementById('mine-list');
-    try {
-      const rows = await api('/punches/mine');
-      if (!rows.length) { list.textContent = 'Nenhuma batida registrada ainda.'; return; }
-      list.innerHTML = `<table><tbody>${rows
-        .slice(0, 8)
-        .map((r) => `<tr><td>${TYPE_LABELS[r.type]}</td><td>${new Date(r.timestamp).toLocaleString('pt-BR')}</td></tr>`)
-        .join('')}</tbody></table>`;
-    } catch (e) {
-      list.textContent = e.message;
-    }
-  }
-  loadMine();
 }
 
 // ---------- Admin: painel DP ----------
 async function renderAdminHome() {
-  render(`
-    <div id="app-inner" class="wide"></div>
-  `);
+  render(`<div id="app-inner" class="wide"></div>`);
   const inner = document.getElementById('app-inner');
   inner.innerHTML = `
     <div class="topbar">
       <img src="logo.jpg" alt="Hope Consultoria" class="logo-small" />
-      <span class="badge">DP · ${state.employee.name}</span>
+      <span class="badge">DP · ${state.admin?.name || ''}</span>
       <div class="row" style="max-width:220px">
-        <button class="secondary" id="to-mine">Bater meu ponto</button>
+        <button class="secondary" id="to-kiosk">Terminal de ponto</button>
         <button class="secondary" id="logout">Sair</button>
       </div>
     </div>
@@ -251,15 +330,25 @@ async function renderAdminHome() {
       <h2>Colaboradores</h2>
       <div id="employees-list" class="muted">Carregando...</div>
       <h2>Novo colaborador</h2>
+      <p class="muted">A foto de cadastro é usada para reconhecer o colaborador na hora de bater o ponto — capriche na iluminação e enquadre bem o rosto.</p>
       <form id="new-employee-form">
         <input id="ne-name" placeholder="Nome completo" required />
         <input id="ne-cpf" placeholder="CPF (somente números)" required />
         <input id="ne-email" placeholder="E-mail (opcional)" />
-        <input id="ne-password" type="password" placeholder="Senha provisória" required />
         <select id="ne-role">
-          <option value="employee">Colaborador</option>
-          <option value="admin">DP / Administrador</option>
+          <option value="employee">Colaborador (bate ponto por reconhecimento facial)</option>
+          <option value="admin">DP / Administrador (login por e-mail e senha)</option>
         </select>
+        <div id="ne-admin-password" style="display:none">
+          <input id="ne-password" type="password" placeholder="Senha do DP" />
+        </div>
+        <div id="ne-face-fields">
+          <label class="muted">Foto do colaborador (rosto de frente, bem iluminado)</label>
+          <input id="ne-photo" type="file" accept="image/*" />
+          <img id="ne-photo-preview" class="preview" style="display:none;margin-bottom:10px" />
+          <button type="button" id="ne-detect" class="secondary">Detectar rosto na foto</button>
+          <p class="muted" id="ne-face-status"></p>
+        </div>
         <button type="submit">Cadastrar colaborador</button>
         <p class="error" id="ne-error"></p>
       </form>
@@ -267,7 +356,7 @@ async function renderAdminHome() {
   `;
 
   document.getElementById('logout').onclick = () => { clearSession(); route(); };
-  document.getElementById('to-mine').onclick = () => renderEmployeeHome();
+  document.getElementById('to-kiosk').onclick = () => { clearSession(); renderKioskLogin(); };
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -281,10 +370,11 @@ async function renderAdminHome() {
       .map((e) => `<option value="${e.id}">${e.name}${e.active ? '' : ' (inativo)'}</option>`)
       .join('');
     const list = document.getElementById('employees-list');
-    list.innerHTML = `<table><thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Status</th><th></th></tr></thead><tbody>${rows
+    list.innerHTML = `<table><thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Rosto cadastrado</th><th>Status</th><th></th></tr></thead><tbody>${rows
       .map(
         (e) => `<tr>
           <td>${e.name}</td><td>${e.cpf}</td><td>${e.role === 'admin' ? 'DP' : 'Colaborador'}</td>
+          <td>${e.role === 'admin' ? '-' : (e.has_face ? 'Sim ✅' : 'Não ⚠️')}</td>
           <td>${e.active ? 'Ativo' : 'Inativo'}</td>
           <td><button class="secondary toggle-active" data-id="${e.id}" data-active="${e.active}" style="width:auto;padding:6px 10px">${e.active ? 'Desativar' : 'Ativar'}</button></td>
         </tr>`
@@ -302,22 +392,78 @@ async function renderAdminHome() {
   }
   loadEmployees();
 
+  const roleSelect = document.getElementById('ne-role');
+  const adminPasswordWrap = document.getElementById('ne-admin-password');
+  const faceFields = document.getElementById('ne-face-fields');
+  roleSelect.onchange = () => {
+    const isAdmin = roleSelect.value === 'admin';
+    adminPasswordWrap.style.display = isAdmin ? 'block' : 'none';
+    faceFields.style.display = isAdmin ? 'none' : 'block';
+  };
+
+  const photoInput = document.getElementById('ne-photo');
+  const photoPreview = document.getElementById('ne-photo-preview');
+  const faceStatus = document.getElementById('ne-face-status');
+  let faceDescriptor = null;
+
+  photoInput.onchange = () => {
+    faceDescriptor = null;
+    faceStatus.textContent = '';
+    const file = photoInput.files[0];
+    if (!file) return;
+    photoPreview.src = URL.createObjectURL(file);
+    photoPreview.style.display = 'block';
+  };
+
+  document.getElementById('ne-detect').onclick = async () => {
+    if (!photoInput.files[0]) {
+      faceStatus.textContent = 'Selecione uma foto primeiro.';
+      return;
+    }
+    faceStatus.textContent = 'Carregando reconhecimento facial...';
+    try {
+      await loadFaceModels();
+      faceStatus.textContent = 'Detectando rosto...';
+      const descriptor = await detectDescriptor(photoPreview);
+      if (!descriptor) {
+        faceStatus.textContent = 'Não encontrei um rosto nessa foto. Tente outra, de frente e bem iluminada.';
+        return;
+      }
+      faceDescriptor = descriptor;
+      faceStatus.textContent = 'Rosto detectado com sucesso ✅';
+    } catch (err) {
+      faceStatus.textContent = err.message;
+    }
+  };
+
   document.getElementById('new-employee-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById('ne-error');
     errorEl.textContent = '';
+    const isAdmin = roleSelect.value === 'admin';
+    if (!isAdmin && !faceDescriptor) {
+      errorEl.textContent = 'Clique em "Detectar rosto na foto" antes de cadastrar o colaborador.';
+      return;
+    }
     try {
-      await api('/employees', {
-        method: 'POST',
-        body: {
-          name: document.getElementById('ne-name').value,
-          cpf: document.getElementById('ne-cpf').value,
-          email: document.getElementById('ne-email').value,
-          password: document.getElementById('ne-password').value,
-          role: document.getElementById('ne-role').value,
-        },
-      });
+      const form = new FormData();
+      form.append('name', document.getElementById('ne-name').value);
+      form.append('cpf', document.getElementById('ne-cpf').value);
+      form.append('email', document.getElementById('ne-email').value);
+      form.append('role', roleSelect.value);
+      if (isAdmin) {
+        form.append('password', document.getElementById('ne-password').value);
+      } else {
+        form.append('photo', photoInput.files[0]);
+        form.append('descriptor', JSON.stringify(faceDescriptor));
+      }
+      await api('/employees', { method: 'POST', body: form });
       e.target.reset();
+      faceDescriptor = null;
+      photoPreview.style.display = 'none';
+      faceStatus.textContent = '';
+      adminPasswordWrap.style.display = 'none';
+      faceFields.style.display = 'block';
       loadEmployees();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -370,9 +516,9 @@ async function renderAdminHome() {
 }
 
 function route() {
-  if (!state.token || !state.employee) return renderLogin();
-  if (state.employee.role === 'admin') return renderAdminHome();
-  return renderEmployeeHome();
+  if (!state.token || !state.role) return renderKioskLogin();
+  if (state.role === 'admin') return renderAdminHome();
+  return renderKioskHome();
 }
 
 if ('serviceWorker' in navigator) {
