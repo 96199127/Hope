@@ -1,0 +1,71 @@
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --accent: #22c55e;
+  --accent-dark: #16a34a;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --danger: #ef4444;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+#app { max-width: 480px; margin: 0 auto; padding: 16px; min-height: 100vh; }
+.wide { max-width: 900px; }
+h1 { font-size: 1.4rem; margin: 8px 0 20px; text-align: center; }
+h2 { font-size: 1.1rem; margin: 16px 0 8px; }
+.card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}
+input, select, button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+button {
+  background: var(--accent);
+  border: none;
+  color: #06210f;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+button:active { opacity: .8; }
+button.secondary { background: #334155; color: var(--text); }
+button.danger { background: var(--danger); color: white; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.error { color: var(--danger); font-size: .9rem; margin-bottom: 10px; }
+.muted { color: var(--muted); font-size: .85rem; }
+video, img.preview { width: 100%; border-radius: 12px; background: #000; }
+.center { text-align: center; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+.punch-clock { font-size: 2.4rem; font-weight: 700; text-align: center; margin: 6px 0 2px; }
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #334155;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #334155; }
+th { color: var(--muted); font-weight: 600; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.topbar button { width: auto; padding: 8px 14px; }

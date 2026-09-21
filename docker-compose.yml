@@ -1,0 +1,31 @@
+version: "3.8"
+
+# Sobe o Marcador de Ponto Hope no mesmo servidor (Oraclon) que já roda o Chatwoot.
+# Use uma rede/proxy reverso existente (ex.: Traefik/nginx) para expor os domínios com HTTPS
+# e garantir que o sistema fique disponível 24h.
+
+services:
+  ponto-backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ponto_data:/app/data
+      - ponto_uploads:/app/uploads
+    ports:
+      - "3001:3001"
+
+  ponto-frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ponto-backend
+
+volumes:
+  ponto_data:
+  ponto_uploads:
