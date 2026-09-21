@@ -53,7 +53,8 @@ function clockLine() {
 // ---------- Login ----------
 function renderLogin(error) {
   render(`
-    <h1>⏰ Ponto Hope</h1>
+    <div class="logo-wrap"><img src="logo.jpg" alt="Hope Consultoria" /></div>
+    <h1>⏰ Marcador de Ponto</h1>
     <div class="card">
       <form id="login-form">
         ${error ? `<div class="error">${error}</div>` : ''}
@@ -84,6 +85,7 @@ function renderLogin(error) {
 async function renderEmployeeHome() {
   render(`
     <div class="topbar">
+      <img src="logo.jpg" alt="Hope Consultoria" class="logo-small" />
       <span class="badge">${state.employee.name}</span>
       <button class="secondary" id="logout">Sair</button>
     </div>
@@ -217,6 +219,7 @@ async function renderAdminHome() {
   const inner = document.getElementById('app-inner');
   inner.innerHTML = `
     <div class="topbar">
+      <img src="logo.jpg" alt="Hope Consultoria" class="logo-small" />
       <span class="badge">DP · ${state.employee.name}</span>
       <div class="row" style="max-width:220px">
         <button class="secondary" id="to-mine">Bater meu ponto</button>

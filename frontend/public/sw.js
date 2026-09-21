@@ -1,5 +1,5 @@
 const CACHE = 'ponto-hope-v1';
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.json'];
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.json', '/logo.jpg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
