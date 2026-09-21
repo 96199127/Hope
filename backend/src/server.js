@@ -24,6 +24,16 @@ app.use('/api/reports', reportRoutes);
 const uploadsPath = process.env.UPLOADS_PATH || './uploads';
 app.use('/api/photos', requireAuth, requireAdmin, express.static(path.resolve(uploadsPath)));
 
+// Serve o frontend junto com a API quando os dois estão no mesmo processo/host
+// (útil para testes rápidos em um único serviço, ex.: Render). Em produção no
+// Oraclon, backend e frontend continuam podendo rodar como containers separados.
+const frontendPath = path.resolve(__dirname, '../../frontend/public');
+const fs = require('fs');
+if (fs.existsSync(frontendPath)) {
+  app.use(express.static(frontendPath));
+  app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(frontendPath, 'index.html')));
+}
+
 // Erros do multer / validações
 app.use((err, req, res, next) => {
   console.error(err);

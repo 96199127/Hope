@@ -43,6 +43,27 @@ npm start                # http://localhost:3000
 - Para atender **outra empresa cliente**, duplique o bloco no `.env` trocando o número (`COMPANY_2_NAME`, `COMPANY_2_CNPJ`, `COMPANY_2_PASSWORD`, `COMPANY_2_ADMIN_EMAIL`...) — cada empresa tem login, colaboradores e relatórios completamente isolados.
 - Antes de qualquer colaborador conseguir bater ponto, o DP precisa cadastrá-lo com uma foto de rosto (tela "Novo colaborador" → anexar foto → "Detectar rosto na foto" → cadastrar).
 
+## Testar online antes de ir para produção (Render, grátis)
+
+Para testar pelo celular de verdade (câmera + reconhecimento facial exigem HTTPS) sem
+ainda mexer no servidor Oraclon, dá para subir uma versão de teste gratuita no Render:
+
+1. Crie uma conta em [render.com](https://render.com) (dá para entrar com a conta do GitHub).
+2. No painel, clique em **New +** → **Blueprint**.
+3. Conecte o repositório `96199127/Hope`, branch `claude/hopeful-ride-2rotsf` — o Render lê o
+   arquivo `render.yaml` da raiz e cria o serviço sozinho (backend + frontend juntos).
+4. Antes de finalizar, preencha as variáveis marcadas para digitar (`JWT_SECRET` — qualquer
+   texto aleatório longo, `COMPANY_1_PASSWORD` — pode manter `Hope@12`, e
+   `COMPANY_1_ADMIN_PASSWORD` — senha do DP).
+5. Espere o deploy terminar (alguns minutos) e abra a URL que o Render gerar (algo como
+   `https://hope-ponto-teste.onrender.com`) — ela já vem com HTTPS, então a câmera funciona
+   normalmente no celular.
+
+⚠️ Esse ambiente é só para teste: o plano gratuito do Render usa disco temporário, então
+colaboradores/fotos/batidas cadastrados podem ser apagados quando o serviço reinicia ou "dorme"
+por inatividade. Para os dados da folha de pagamento valerem de verdade, o destino final é o
+servidor Oraclon (próxima seção), onde os dados ficam em volume persistente.
+
 ## Deploy no servidor Oraclon (junto do Chatwoot)
 
 O `docker-compose.yml` na raiz sobe backend (porta 3001) e frontend (porta 3000) com `restart: unless-stopped`, para rodar 24h sem perder dados (SQLite fica em volume Docker) nem conexão.
